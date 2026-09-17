@@ -62,14 +62,29 @@ context**, **12 concurrent requests**, **prefix caching**, and a measured
 
 ```mermaid
 flowchart LR
-    Client["Client\n(curl / OpenAI SDK / Open WebUI)"] -->|"HTTP :8000\n/v1/chat/completions"| API["vLLM OpenAI-compatible\nAPI server"]
-    API --> Sched["vLLM Scheduler\nchunked prefill · prefix cache\nmax-num-seqs=12"]
-    Sched --> Engine["Engine Core\nMoE (marlin backend) · FlashInfer attention"]
-    Engine --> GPU["NVIDIA GB10 GPU\nNVFP4 weights · FP8 KV cache"]
-    GPU --> Engine --> Sched --> API -->|"streamed tokens"| Client
+    Client(["Client\ncurl · OpenAI SDK · Open WebUI"])
+    API["API Server\nOpenAI-compatible"]
+    Sched["Scheduler\nchunked prefill · prefix cache\nmax-num-seqs = 12"]
+    Engine["Engine Core\nMoE (marlin) · FlashInfer attention"]
+    GPU(["NVIDIA GB10 GPU\nNVFP4 weights · FP8 KV cache"])
+    Prom[("Prometheus")]
+    Graf["Grafana"]
 
-    API -.->|"/metrics"| Prom["Prometheus"]
-    Prom --> Graf["Grafana dashboard"]
+    Client == "POST /v1/chat/completions" ==> API
+    API ==> Sched ==> Engine ==> GPU
+    GPU -. tokens .-> Engine -. tokens .-> Sched -. "SSE stream" .-> API
+    API == "streamed response" ==> Client
+    API -. "/metrics" .-> Prom ==> Graf
+
+    classDef client fill:#5794F2,stroke:#2D5FA3,color:#ffffff,stroke-width:2px
+    classDef serving fill:#FF9830,stroke:#C46F1F,color:#1a1a1a,stroke-width:2px
+    classDef hardware fill:#73BF69,stroke:#3F7A39,color:#0a1f08,stroke-width:2px
+    classDef obs fill:#8E8E93,stroke:#5A5A5E,color:#ffffff,stroke-width:2px
+
+    class Client client
+    class API,Sched,Engine serving
+    class GPU hardware
+    class Prom,Graf obs
 ```
 
 ### System / hardware block diagram
@@ -78,32 +93,47 @@ flowchart LR
 graph TB
     subgraph HW["NVIDIA DGX Spark — GB10 Superchip"]
         GPU2["Blackwell GPU\ncompute capability 12.1"]
-        MEM["128GB unified memory\n(shared CPU + GPU)"]
+        MEM["128GB unified memory\nshared CPU + GPU"]
     end
 
-    subgraph HOST["Host OS: Linux + NVIDIA Container Toolkit"]
+    subgraph HOST["Host OS — Linux + NVIDIA Container Toolkit"]
         DOCKER["Docker Engine"]
     end
 
-    subgraph CONTAINER["Container: nvcr.io/nvidia/vllm:26.07-py3\n(+ xgrammar 0.2.4 patch)"]
-        VLLM["vLLM 0.24.0 OpenAI API server"]
-        WEIGHTS["Model weights\n(HF cache volume)\nnvidia/Qwen3.6-35B-A3B-NVFP4"]
+    subgraph CONTAINER["Container — nvcr.io/nvidia/vllm:26.07-py3 (+ xgrammar 0.2.4 patch)"]
+        VLLM["vLLM 0.24.0\nOpenAI API server"]
+        WEIGHTS[("Model weights\nHF cache volume\nnvidia/Qwen3.6-35B-A3B-NVFP4")]
     end
 
-    subgraph MON["Monitoring stack (sibling containers)"]
+    subgraph MON["Monitoring Stack — sibling containers"]
         DCGM["dcgm-exporter"]
         NODE["node-exporter"]
-        PROM2["Prometheus"]
+        PROM2[("Prometheus")]
         GRAF2["Grafana"]
     end
 
-    HW --> HOST --> DOCKER --> CONTAINER
+    HW ==> HOST ==> DOCKER ==> CONTAINER
     VLLM --> WEIGHTS
     DOCKER --> MON
     DCGM --> PROM2
     NODE --> PROM2
-    VLLM -->|"/metrics :8000"| PROM2
+    VLLM -. "/metrics :8000" .-> PROM2
     PROM2 --> GRAF2
+
+    classDef hw fill:#73BF69,stroke:#3F7A39,color:#0a1f08,stroke-width:2px
+    classDef host fill:#5794F2,stroke:#2D5FA3,color:#ffffff,stroke-width:2px
+    classDef container fill:#FF9830,stroke:#C46F1F,color:#1a1a1a,stroke-width:2px
+    classDef mon fill:#8E8E93,stroke:#5A5A5E,color:#ffffff,stroke-width:2px
+
+    class GPU2,MEM hw
+    class DOCKER host
+    class VLLM,WEIGHTS container
+    class DCGM,NODE,PROM2,GRAF2 mon
+
+    style HW fill:#0d2b0a,stroke:#73BF69,stroke-width:2px,color:#ffffff
+    style HOST fill:#0d1f3a,stroke:#5794F2,stroke-width:2px,color:#ffffff
+    style CONTAINER fill:#3a2205,stroke:#FF9830,stroke-width:2px,color:#ffffff
+    style MON fill:#2b2b2d,stroke:#8E8E93,stroke-width:2px,color:#ffffff
 ```
 
 ## Hardware & Software Requirements
