@@ -1,5 +1,11 @@
 <div align="center">
 
+<img src="assets/dgx-spark-banner.jpg" alt="NVIDIA DGX Spark" width="100%">
+
+<br>
+
+<img src="assets/qwen-logo.png" alt="Qwen logo" width="72">
+
 # Qwen3.6-35B-A3B-NVFP4 on NVIDIA DGX Spark (GB10)
 
 **Production vLLM deployment recipe — 12 concurrent users, 262K context, 219 tok/s peak output**
