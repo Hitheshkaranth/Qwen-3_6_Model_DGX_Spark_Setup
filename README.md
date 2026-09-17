@@ -118,7 +118,7 @@ graph TB
 Container Toolkit already set up:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<owner>/Qwen-3_6_Model_DGX_Spark_Setup/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Hitheshkaranth/Qwen-3_6_Model_DGX_Spark_Setup/main/install.sh | bash
 ```
 
 This checks prerequisites (Docker, GPU visibility), clones the repo, builds
@@ -127,7 +127,7 @@ the patched image, and starts the server — safe to re-run if it stops partway.
 Prefer to clone it yourself first? Same result:
 
 ```bash
-git clone https://github.com/<owner>/Qwen-3_6_Model_DGX_Spark_Setup.git && cd Qwen-3_6_Model_DGX_Spark_Setup && ./run.sh
+git clone https://github.com/Hitheshkaranth/Qwen-3_6_Model_DGX_Spark_Setup.git && cd Qwen-3_6_Model_DGX_Spark_Setup && ./run.sh
 ```
 
 Either way, first run downloads the ~21.8GB checkpoint from Hugging Face into

@@ -2,13 +2,13 @@
 # One-line installer for nvidia/Qwen3.6-35B-A3B-NVFP4 on a DGX Spark (GB10)
 # or any single Blackwell GPU box.
 #
-#   curl -fsSL https://raw.githubusercontent.com/<owner>/Qwen-3_6_Model_DGX_Spark_Setup/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Hitheshkaranth/Qwen-3_6_Model_DGX_Spark_Setup/main/install.sh | bash
 #
 # Clones this repo (or updates it if already present in the current
 # directory) and builds + starts the server via run.sh. Safe to re-run.
 set -euo pipefail
 
-REPO_URL="${QWEN36_REPO_URL:-https://github.com/<owner>/Qwen-3_6_Model_DGX_Spark_Setup.git}"
+REPO_URL="${QWEN36_REPO_URL:-https://github.com/Hitheshkaranth/Qwen-3_6_Model_DGX_Spark_Setup.git}"
 DIR="Qwen-3_6_Model_DGX_Spark_Setup"
 
 echo "==> Checking prerequisites..."
