@@ -114,16 +114,25 @@ graph TB
 
 ## Quick Start
 
+**One line**, on any single-Blackwell-GPU box with Docker + the NVIDIA
+Container Toolkit already set up:
+
 ```bash
-git clone <this-repo-url> Qwen-3_6_Model_DGX_Spark_Setup
-cd Qwen-3_6_Model_DGX_Spark_Setup
-./run.sh
+curl -fsSL https://raw.githubusercontent.com/<owner>/Qwen-3_6_Model_DGX_Spark_Setup/main/install.sh | bash
 ```
 
-That's it — `run.sh` builds the patched image and starts the server on
-`http://localhost:8000`. First run downloads the ~21.8GB checkpoint from
-Hugging Face into a named Docker volume (`vllm-huggingface-cache`), so
-subsequent restarts skip the download entirely.
+This checks prerequisites (Docker, GPU visibility), clones the repo, builds
+the patched image, and starts the server — safe to re-run if it stops partway.
+
+Prefer to clone it yourself first? Same result:
+
+```bash
+git clone https://github.com/<owner>/Qwen-3_6_Model_DGX_Spark_Setup.git && cd Qwen-3_6_Model_DGX_Spark_Setup && ./run.sh
+```
+
+Either way, first run downloads the ~21.8GB checkpoint from Hugging Face into
+a named Docker volume (`qwen3.6-dgx-spark-hf-cache`), so subsequent restarts
+skip the download entirely.
 
 ## Manual Setup — Step by Step
 
@@ -331,6 +340,7 @@ resp = client.chat.completions.create(
 ```
 Qwen-3_6_Model_DGX_Spark_Setup/
 ├── README.md                          # this file
+├── install.sh                         # one-line installer (curl | bash)
 ├── Dockerfile                         # nvcr vLLM base + xgrammar patch
 ├── run.sh                             # build + run, one command
 ├── benchmarks/
