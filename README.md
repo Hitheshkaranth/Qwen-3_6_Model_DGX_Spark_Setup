@@ -1,10 +1,6 @@
 <div align="center">
 
-<img src="assets/dgx-spark-banner.jpg" alt="NVIDIA DGX Spark" width="100%">
-
-<br>
-
-<img src="assets/qwen-logo.png" alt="Qwen logo" width="72">
+<img src="assets/dgx-spark-banner-new.png" alt="NVIDIA DGX Spark" width="100%">
 
 # Qwen3.6-35B-A3B-NVFP4 on NVIDIA DGX Spark (GB10)
 
@@ -21,6 +17,10 @@
 ---
 
 ## Overview
+
+<div align="center">
+<img src="assets/qwen3.6-banner.png" alt="Qwen 3.6 35B-A3B" width="480">
+</div>
 
 This repository is the exact, currently-running configuration used to serve
 [**`nvidia/Qwen3.6-35B-A3B-NVFP4`**](https://huggingface.co/nvidia/Qwen3.6-35B-A3B-NVFP4)
@@ -409,3 +409,8 @@ Qwen-3_6_Model_DGX_Spark_Setup/
 - Model weights are distributed under **Apache 2.0** — see the
   [model card](https://huggingface.co/nvidia/Qwen3.6-35B-A3B-NVFP4) for full terms.
 - This repository's own scripts/config: Apache 2.0.
+
+<div align="center">
+<br>
+<img src="assets/qwen-logo.png" alt="Qwen logo" width="56">
+</div>
