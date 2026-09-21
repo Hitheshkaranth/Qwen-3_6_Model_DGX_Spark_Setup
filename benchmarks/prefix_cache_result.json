@@ -1,0 +1,45 @@
+{
+  "shared_prefix_tokens": 4220,
+  "test_A_shared_prefix": {
+    "wall_s_total": 1.634,
+    "avg_ttft_s": 0.232,
+    "cache_hit_tokens": 50304.0,
+    "computed_tokens": 686.0,
+    "cache_hit_ratio": 0.9865,
+    "per_request_wall_s": [
+      1.6,
+      1.43,
+      1.6,
+      1.54,
+      1.54,
+      1.54,
+      1.57,
+      1.57,
+      1.63,
+      1.59,
+      1.57,
+      1.59
+    ]
+  },
+  "test_B_unique_prefixes": {
+    "wall_s_total": 8.408,
+    "avg_ttft_s": 5.003,
+    "cache_hit_tokens": 0.0,
+    "computed_tokens": 51095.0,
+    "cache_hit_ratio": 0.0,
+    "per_request_wall_s": [
+      8.26,
+      8.18,
+      8.18,
+      8.33,
+      8.41,
+      8.38,
+      8.35,
+      8.4,
+      8.26,
+      8.33,
+      8.4,
+      8.38
+    ]
+  }
+}

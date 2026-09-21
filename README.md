@@ -48,6 +48,7 @@ context**, **12 concurrent requests**, **prefix caching**, and a measured
   - [Reasoning Benchmarks](#reasoning-benchmarks)
   - [Throughput Benchmarks](#throughput-benchmarks)
   - [Concurrency Load Test](#concurrency-load-test-12-simultaneous-requests)
+  - [Prefix Caching](#prefix-caching--concurrent-sessions-sharing-a-prompt)
 - [Live Monitoring Dashboard](#live-monitoring-dashboard)
 - [Client Usage](#client-usage)
 - [Repository Layout](#repository-layout)
@@ -333,6 +334,36 @@ each, thinking disabled — run against this exact server
 | KV-cache concurrency headroom at full 262K context | 22.55x |
 
 Raw results: [`benchmarks/load_test_result.json`](benchmarks/load_test_result.json).
+
+### Prefix Caching — Concurrent Sessions Sharing a Prompt
+
+Yes, prefix caching exists here and is genuinely active — **94.9% of all
+prompt tokens processed by this production server have been served from
+the prefix cache**, not recomputed (`vllm:prompt_tokens_by_source_total`,
+live counter). But it only helps above a specific, non-obvious minimum
+prefix length on this model — see
+[`docs/ENGINEERING.md §6`](docs/ENGINEERING.md#6-prefix-caching-does-it-actually-help-concurrent-sessions)
+for why (short version: this model's hybrid Mamba/attention architecture
+forces a **2,096-token cache block size**, instead of the usual 16, so a
+shared prefix has to clear that bar before any reuse happens at all).
+
+Measured: 12 concurrent sessions sharing a 4,220-token prompt prefix vs.
+12 sessions with unique prefixes of the same length —
+
+![Prefix cache benchmark](benchmarks/prefix_cache_benchmark.png)
+
+| Metric | Shared prefix (warm) | Unique prefixes (no reuse) |
+|---|---|---|
+| Prefix cache hit ratio | **98.65%** | 0% |
+| Avg. time-to-first-token | **0.232s** | 5.003s (~21.6x slower) |
+| Total wall time (12 concurrent) | **1.634s** | 8.408s (~5.1x slower) |
+
+Reuse and eviction controls (what you can and can't tune), and why an
+eviction-forcing test wasn't run against this production server, are
+covered in detail in
+[`docs/ENGINEERING.md §6.3`](docs/ENGINEERING.md#63-reuse--eviction-controls-that-actually-exist).
+Script: [`benchmarks/prefix_cache_bench.py`](benchmarks/prefix_cache_bench.py) ·
+raw results: [`benchmarks/prefix_cache_result.json`](benchmarks/prefix_cache_result.json).
 
 ## Live Monitoring Dashboard
 

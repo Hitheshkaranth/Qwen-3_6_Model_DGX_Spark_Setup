@@ -233,7 +233,128 @@ Prometheus scrape config points at the vLLM job by hostname/port rather
 than a fixed model name, so the same dashboard keeps working across model
 swaps on this box without editing queries.
 
-## 6. Known limitations / open items
+## 6. Prefix caching: does it actually help concurrent sessions?
+
+Short answer: **yes, dramatically** — but only above a hardware-imposed
+minimum prefix length that is easy to miss. This section covers whether
+prefix caching exists and fires for concurrent sessions sharing a prompt,
+what controls exist over reuse and eviction, and what it's actually worth
+measured live on this deployment.
+
+### 6.1 Does it exist, and is it actually active?
+
+Yes on both counts. `--enable-prefix-caching` is set (§3.3), and it is not
+just nominally on — it is doing the overwhelming majority of the prefill
+work in real production traffic on this server:
+
+```
+vllm:prompt_tokens_by_source_total{source="local_compute"}    15,302,025
+vllm:prompt_tokens_by_source_total{source="local_cache_hit"}  283,875,952
+```
+
+**94.9% of all prompt tokens processed by this server have been served
+from the prefix cache, not recomputed** — a live counter snapshot, not a
+synthetic number.
+
+### 6.2 The detail that actually matters: block granularity
+
+Prefix caching in vLLM's V1 engine works at **KV-cache block** granularity,
+not per-token — two requests only share cache for a prefix if it fills one
+or more *complete* blocks with identical content (confirmed by reading
+`vllm/v1/core/block_pool.py` inside the running container: blocks are
+looked up by hash in `BlockHashToBlockMap`, and only whole, full blocks get
+a hash and become reusable).
+
+The block size is normally a small, fixed number (16 tokens) in vanilla
+vLLM. **On this deployment it isn't** — the server's own reported config:
+
+```
+$ curl -s :8000/metrics | grep cache_config_info
+vllm:cache_config_info{block_size="2096", ..., num_gpu_blocks="2977", ...}
+```
+
+**The effective prefix-cache block size here is 2,096 tokens**, not 16.
+This is a direct consequence of the model's hybrid architecture (linear/
+Mamba attention layers mixed with full-attention layers, see §2) — vLLM
+sizes the attention block to be an exact multiple of the Mamba state page
+size so the two caches stay aligned (logged at startup as *"Setting
+attention block size to N tokens to ensure that attention page size is >=
+mamba page size"*).
+
+**Practical consequence: a shared system prompt shorter than ~2,096 tokens
+gets zero prefix-cache benefit on this model**, no matter how many
+concurrent sessions share it — it never fills one complete block. This is
+very different from a plain-transformer model on default vLLM settings,
+where even a 50-token shared system prompt caches fine. If you're
+migrating tuning intuition from a dense non-hybrid model, this is the one
+assumption that breaks.
+
+### 6.3 Reuse & eviction controls that actually exist
+
+There is no separate "eviction policy" flag — the mechanism is fixed, and
+the only levers are:
+
+| Control | Flag | Effect |
+|---|---|---|
+| On/off | `--enable-prefix-caching` | Master switch. On here. |
+| Cache granularity | `--block-size` | Not set explicitly here — resolved to 2096 by the Mamba-alignment logic in §6.2. Setting it manually is possible but must stay a multiple of the Mamba page size for this architecture. |
+| Hash function | `--prefix-caching-hash-algo` | `sha256` (default). A `builtin`-hash option trades collision-safety for speed; not changed here. |
+| Cache capacity | `--gpu-memory-utilization`, `--max-model-len`, `--kv-cache-dtype` | Indirectly set how many total KV blocks exist (`num_gpu_blocks=2977` here) — more blocks means more distinct prefixes can stay cached before anything is evicted. |
+
+**Eviction itself** (read directly from `vllm/v1/core/kv_cache_utils.py`,
+class `FreeKVCacheBlockQueue`): a **reference-counted LRU** over whole
+blocks. A block is only eligible for eviction once its reference count
+drops to zero (i.e., no running request is still reading it); among
+eligible blocks, the least-recently-touched one is freed first when a new
+block is needed. There is no manual invalidation API, no TTL, and no
+per-request "don't cache this" flag exposed at the vLLM CLI level — the
+only way to influence what stays resident is capacity (more free blocks
+delays eviction pressure) and access pattern (reusing a prefix "touches"
+its blocks and moves them to the back of the LRU queue).
+
+At this server's current KV-cache capacity (5,912,141 tokens / 2,977
+blocks at 2096 tokens/block), an eviction-forcing test would require
+generating several million tokens of unique, non-reused prefill traffic —
+prohibitively slow and disruptive to run against this production server,
+so it was not attempted here. The reuse-side behavior below **was**
+measured live.
+
+### 6.4 Measured: 12 concurrent sessions sharing a prefix vs. 12 that don't
+
+Benchmark: [`benchmarks/prefix_cache_bench.py`](../benchmarks/prefix_cache_bench.py).
+Methodology — one request first "warms" a 4,220-token shared prompt (comfortably
+above the 2,096-token block size from §6.2), then 12 concurrent requests are
+fired either (A) all reusing that exact prefix, or (B) each with its own
+unique 4,220-token prefix. `vllm:prompt_tokens_by_source_total` and
+`vllm:time_to_first_token_seconds_{sum,count}` are snapshotted immediately
+before and after each phase so the reported numbers are exact deltas for
+that phase, not estimates.
+
+![Prefix cache benchmark](../benchmarks/prefix_cache_benchmark.png)
+
+| Metric | Shared prefix (warm) | Unique prefixes (no reuse) |
+|---|---|---|
+| Prefix cache hit ratio | **98.65%** | 0% |
+| Avg. time-to-first-token | **0.232s** | 5.003s |
+| Total wall time (12 concurrent) | **1.634s** | 8.408s |
+
+Sharing a long-enough prefix across concurrent sessions made average TTFT
+**~21.6x faster** and total wall time for the batch **~5.1x faster** — the
+12 "cache hit" requests only had to compute the small unique suffix each
+carried, while the 12 "no reuse" requests each recomputed the full
+4,220-token prefix from scratch, competing for the same GPU at the same
+time. Raw numbers: [`benchmarks/prefix_cache_result.json`](../benchmarks/prefix_cache_result.json).
+
+**Takeaway for this deployment:** prefix caching is a large, real win for
+any workload with a shared prefix ≥ ~2,096 tokens (a long system prompt,
+a shared RAG context, a common few-shot preamble) — but delivers *nothing*
+for the more common case of a short (few-hundred-token) shared system
+prompt, purely because of the block-size mechanics in §6.2. If your
+traffic is mostly short shared system prompts, this specific model's
+prefix cache will not help you, and the win only shows up once shared
+context crosses that block boundary.
+
+## 7. Known limitations / open items
 
 - **MTP is unvalidated for this checkpoint** (see §2) — the largest
   plausible remaining throughput lever, untested by design.
